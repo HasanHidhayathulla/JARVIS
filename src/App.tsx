@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AssistantPane } from './components/AssistantPane';
 import { CommandLogView } from './components/CommandLogView';
+import { CommandPalette } from './components/CommandPalette';
 import { Header } from './components/Header';
 import { ProvidersView } from './components/ProvidersView';
 import { Sidebar } from './components/Sidebar';
@@ -101,6 +102,7 @@ export default function App() {
   const [pendingCallId, setPendingCallId] = useState<string | null>(null);
   const [pendingSource, setPendingSource] = useState<'server' | 'browser' | null>(null);
   const [includeTerminalContext, setIncludeTerminalContext] = useState(true);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
 
   const browserLocalContinuationRef = useRef<{
     callId: string;
@@ -213,6 +215,18 @@ export default function App() {
     return () => {
       es.close();
     };
+  }, []);
+
+  // Global Ctrl+K / Cmd+K shortcut to toggle command palette
+  useEffect(() => {
+    const onGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onGlobalKeyDown);
+    return () => window.removeEventListener('keydown', onGlobalKeyDown);
   }, []);
 
   const handleRefreshLocalModels = useCallback(async () => {
@@ -630,6 +644,7 @@ export default function App() {
               onToolDecision={(callId, approved) => void handleToolDecision(callId, approved)}
               onRunSnippetInTerminal={(cmd) => void handleExecTerminal(cmd)}
               onClearChat={handleClearChat}
+              onOpenCommandPalette={() => setIsPaletteOpen(true)}
             />
 
             <TerminalPane
@@ -659,6 +674,34 @@ export default function App() {
       ) : (
         <CommandLogView entries={terminalEntries} onClearLog={handleClearTerminal} />
       )}
+
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        onClose={() => setIsPaletteOpen(false)}
+        config={config}
+        availability={availability}
+        localDiscovery={localDiscovery}
+        sessions={sessions}
+        activeSessionId={activeSession?.id || ''}
+        activeView={activeView}
+        runningId={runningId}
+        theme={theme}
+        onChangeConfig={handleChangeConfig}
+        onSelectView={setActiveView}
+        onNewSession={handleNewSession}
+        onSelectSession={(id) => {
+          setActiveSessionId(id);
+          setPendingCallId(null);
+          setPendingSource(null);
+        }}
+        onClearChat={handleClearChat}
+        onClearTerminal={handleClearTerminal}
+        onResetCwd={handleResetCwd}
+        onKillProcess={handleKillProcess}
+        onExecTerminal={(cmd) => void handleExecTerminal(cmd)}
+        onRefreshLocalModels={() => void handleRefreshLocalModels()}
+        onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+      />
     </div>
   );
 }

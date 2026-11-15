@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Command,
   Copy,
   Play,
   Send,
@@ -23,6 +24,7 @@ interface AssistantPaneProps {
   onToolDecision: (callId: string, approved: boolean) => void;
   onRunSnippetInTerminal: (command: string) => void;
   onClearChat: () => void;
+  onOpenCommandPalette: () => void;
 }
 
 function CodeBlock({
@@ -253,6 +255,7 @@ export function AssistantPane({
   onToolDecision,
   onRunSnippetInTerminal,
   onClearChat,
+  onOpenCommandPalette,
 }: AssistantPaneProps) {
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
@@ -308,15 +311,26 @@ export function AssistantPane({
             {config.executionPolicy === 'ask' ? 'Ask Before Run' : 'Auto Run'}
           </span>
         </div>
-        {messages.length > 0 && (
+        <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
-            onClick={onClearChat}
-            className="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 whitespace-nowrap shrink-0 cursor-pointer"
+            onClick={onOpenCommandPalette}
+            className="inline-flex items-center gap-1.5 px-2 py-1 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            Clear Thread
+            <Command className="w-3 h-3" aria-hidden="true" />
+            <span>Commands</span>
+            <span className="font-mono text-[11px] text-slate-400">⌘K</span>
           </button>
-        )}
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={onClearChat}
+              className="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              Clear Thread
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Conversation Scroll Area */}
