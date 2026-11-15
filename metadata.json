@@ -1,0 +1,6 @@
+{
+  "name": "ShellPilot",
+  "description": "Multi-provider AI assistant interface with API and local model switching and direct internal PC terminal control.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
