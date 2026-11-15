@@ -130,6 +130,11 @@ async function startServer() {
     });
   });
 
+  // Working directory context for CLI command suggestions
+  app.get('/api/terminal/context', (_req, res) => {
+    res.json(terminalManager.getDirectoryContext());
+  });
+
   // Live SSE terminal event stream
   app.get('/api/terminal/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');

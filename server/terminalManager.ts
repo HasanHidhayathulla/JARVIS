@@ -113,6 +113,89 @@ class TerminalManager {
     };
   }
 
+  public getDirectoryContext(): {
+    cwd: string;
+    directories: string[];
+    files: string[];
+    isGitRepo: boolean;
+    hasPackageJson: boolean;
+    packageScripts: string[];
+    hasPython: boolean;
+    hasDocker: boolean;
+  } {
+    const directories: string[] = [];
+    const files: string[] = [];
+    let hasPackageJson = false;
+    let packageScripts: string[] = [];
+    let hasPython = false;
+    let hasDocker = false;
+
+    try {
+      const dirents = fs.readdirSync(this.cwd, { withFileTypes: true });
+      for (const d of dirents) {
+        if (d.name === 'node_modules') continue;
+        if (d.isDirectory()) {
+          if (d.name !== '.git' && directories.length < 40) {
+            directories.push(d.name);
+          }
+        } else {
+          if (files.length < 50) {
+            files.push(d.name);
+          }
+          if (d.name === 'package.json') hasPackageJson = true;
+          if (d.name.endsWith('.py') || d.name === 'requirements.txt' || d.name === 'pyproject.toml') {
+            hasPython = true;
+          }
+          if (
+            d.name === 'Dockerfile' ||
+            d.name === 'docker-compose.yml' ||
+            d.name === 'docker-compose.yaml' ||
+            d.name === 'compose.yaml'
+          ) {
+            hasDocker = true;
+          }
+        }
+      }
+    } catch {
+      // Ignore unreadable directory
+    }
+
+    if (hasPackageJson) {
+      try {
+        const rawPkg = fs.readFileSync(path.join(this.cwd, 'package.json'), 'utf8');
+        const parsed = JSON.parse(rawPkg) as { scripts?: Record<string, string> };
+        if (parsed.scripts && typeof parsed.scripts === 'object') {
+          packageScripts = Object.keys(parsed.scripts).slice(0, 15);
+        }
+      } catch {
+        // Ignore invalid package.json
+      }
+    }
+
+    let isGitRepo = false;
+    let checkDir = this.cwd;
+    for (let depth = 0; depth < 4; depth++) {
+      if (fs.existsSync(path.join(checkDir, '.git'))) {
+        isGitRepo = true;
+        break;
+      }
+      const parent = path.dirname(checkDir);
+      if (parent === checkDir) break;
+      checkDir = parent;
+    }
+
+    return {
+      cwd: this.cwd,
+      directories: directories.sort(),
+      files: files.sort(),
+      isGitRepo,
+      hasPackageJson,
+      packageScripts,
+      hasPython,
+      hasDocker,
+    };
+  }
+
   public subscribe(listener: (event: TerminalEvent) => void): () => void {
     this.subscribers.add(listener);
     listener({

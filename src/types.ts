@@ -93,3 +93,14 @@ export interface ChatSession {
   createdAt: string;
   messages: ChatMessage[];
 }
+
+export interface TerminalContextInfo {
+  cwd: string;
+  directories: string[];
+  files: string[];
+  isGitRepo: boolean;
+  hasPackageJson: boolean;
+  packageScripts: string[];
+  hasPython: boolean;
+  hasDocker: boolean;
+}
