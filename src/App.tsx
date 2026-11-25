@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AssistantPane } from './components/AssistantPane';
 import { CommandLogView } from './components/CommandLogView';
 import { CommandPalette } from './components/CommandPalette';
+import { DashboardView } from './components/DashboardView';
 import { Header } from './components/Header';
 import { ProvidersView } from './components/ProvidersView';
 import { Sidebar } from './components/Sidebar';
@@ -383,6 +384,7 @@ export default function App() {
             providerLabel: localTurn.providerLabel,
             modelLabel: localTurn.modelLabel,
             toolCalls: localTurn.toolCalls,
+            usage: localTurn.usage,
           };
           updateSessionMessages(sessionId, (prev) => [...prev, assistantMsg]);
 
@@ -410,6 +412,7 @@ export default function App() {
         providerLabel: data.providerLabel,
         modelLabel: data.modelLabel,
         toolCalls: data.toolCalls,
+        usage: data.usage,
       };
       updateSessionMessages(sessionId, (prev) => [...prev, assistantMsg]);
 
@@ -508,6 +511,7 @@ export default function App() {
             return {
               ...m,
               content: nextTurn.text || m.content,
+              usage: nextTurn.usage || m.usage,
               toolCalls: [
                 ...(m.toolCalls || []).map((t) => (t.id === callId ? { ...t, ...traceUpdate } : t)),
                 ...(nextTurn.toolCalls || []),
@@ -560,6 +564,7 @@ export default function App() {
           return {
             ...m,
             content: data.text ? (m.content ? `${m.content}\n\n${data.text}` : data.text) : m.content,
+            usage: data.usage || m.usage,
             toolCalls: mergedTraces,
           };
         });
@@ -659,6 +664,14 @@ export default function App() {
             />
           </div>
         </div>
+      ) : activeView === 'dashboard' ? (
+        <DashboardView
+          sessions={sessions}
+          activeSessionId={activeSession?.id || ''}
+          terminalEntries={terminalEntries}
+          theme={theme}
+          onOpenWorkspace={() => setActiveView('workspace')}
+        />
       ) : activeView === 'providers' ? (
         <ProvidersView
           config={config}

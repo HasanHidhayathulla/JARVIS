@@ -1,4 +1,4 @@
-import type { LocalRuntimeId, ModelConfig, ToolCallTrace } from '../types';
+import type { LocalRuntimeId, ModelConfig, TokenUsage, ToolCallTrace } from '../types';
 
 export interface DiscoveredLocalModel {
   id: string;
@@ -106,6 +106,7 @@ export interface BrowserLocalTurnResult {
   };
   providerLabel: string;
   modelLabel: string;
+  usage: TokenUsage;
   continuationMessages?: Array<Record<string, unknown>>;
 }
 
@@ -157,20 +158,22 @@ export async function runBrowserLocalTurn(
 
   const workingMessages = [...messages];
   const traces = [...existingTraces];
+  const usage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
   for (let step = 0; step < 5; step++) {
+    const requestMessages = [
+      {
+        role: 'system',
+        content: `You are ShellPilot, an AI assistant connected to the internal PC terminal (cwd: ${cwd}). Use run_terminal_command to inspect files or run commands, or output <terminal_command>cmd</terminal_command>.`,
+      },
+      ...workingMessages,
+    ];
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: config.localModel,
-        messages: [
-          {
-            role: 'system',
-            content: `You are ShellPilot, an AI assistant connected to the internal PC terminal (cwd: ${cwd}). Use run_terminal_command to inspect files or run commands, or output <terminal_command>cmd</terminal_command>.`,
-          },
-          ...workingMessages,
-        ],
+        messages: requestMessages,
         tools: LOCAL_TOOLS,
         stream: false,
       }),
@@ -190,11 +193,33 @@ export async function runBrowserLocalTurn(
           }>;
         };
       }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
     };
 
     const msg = data.choices?.[0]?.message;
     const text = (msg?.content || '').trim();
     const calls = msg?.tool_calls || [];
+
+    if (data.usage) {
+      const p = data.usage.prompt_tokens || 0;
+      const c = data.usage.completion_tokens || 0;
+      usage.promptTokens += p;
+      usage.completionTokens += c;
+      usage.totalTokens += data.usage.total_tokens || p + c;
+    } else {
+      const promptChars = JSON.stringify(requestMessages).length;
+      const completionChars = text.length + JSON.stringify(calls).length;
+      const p = Math.max(1, Math.ceil(promptChars / 4));
+      const c = Math.max(1, Math.ceil(completionChars / 4));
+      usage.promptTokens += p;
+      usage.completionTokens += c;
+      usage.totalTokens += p + c;
+      usage.estimated = true;
+    }
 
     if (calls.length === 0) {
       const tagMatch = text.match(/<terminal_command>([\s\S]*?)<\/terminal_command>/i);
@@ -224,6 +249,7 @@ export async function runBrowserLocalTurn(
             },
             providerLabel,
             modelLabel: config.localModel,
+            usage,
             continuationMessages: workingMessages,
           };
         }
@@ -259,6 +285,7 @@ export async function runBrowserLocalTurn(
         toolCalls: traces,
         providerLabel,
         modelLabel: config.localModel,
+        usage,
       };
     }
 
@@ -322,6 +349,7 @@ export async function runBrowserLocalTurn(
           pendingTool: { callId, command, reason, cwd },
           providerLabel,
           modelLabel: config.localModel,
+          usage,
           continuationMessages: workingMessages,
         };
       }
@@ -365,5 +393,6 @@ export async function runBrowserLocalTurn(
     toolCalls: traces,
     providerLabel,
     modelLabel: config.localModel,
+    usage,
   };
 }

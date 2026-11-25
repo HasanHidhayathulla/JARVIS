@@ -10,6 +10,7 @@ interface HeaderProps {
 export function Header({ activeView, onSelectView, onNewSession }: HeaderProps) {
   const navItems: Array<{ id: WorkspaceView; label: string }> = [
     { id: 'workspace', label: 'Workspace' },
+    { id: 'dashboard', label: 'Dashboard' },
     { id: 'providers', label: 'Providers' },
     { id: 'log', label: 'Command Log' },
   ];

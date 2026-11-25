@@ -37,6 +37,13 @@ export interface ToolTrace {
   durationMs?: number;
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimated?: boolean;
+}
+
 export interface PendingDecisionState {
   callId: string;
   toolName: 'run_terminal_command';
@@ -46,6 +53,7 @@ export interface PendingDecisionState {
   providerKind: 'gemini' | 'openai_compat' | 'anthropic' | 'ollama';
   config: ChatRequestConfig;
   tracesSoFar: ToolTrace[];
+  usageSoFar: TokenUsage;
   geminiContents?: Content[];
   openaiMessages?: Array<Record<string, unknown>>;
   anthropicMessages?: Array<Record<string, unknown>>;
@@ -72,6 +80,24 @@ export interface ChatTurnResult {
   };
   providerLabel: string;
   modelLabel: string;
+  usage: TokenUsage;
+}
+
+function emptyUsage(): TokenUsage {
+  return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+}
+
+function addUsage(
+  acc: TokenUsage,
+  promptTokens: number,
+  completionTokens: number,
+  totalTokens?: number,
+  estimated = false
+): void {
+  acc.promptTokens += promptTokens;
+  acc.completionTokens += completionTokens;
+  acc.totalTokens += totalTokens ?? promptTokens + completionTokens;
+  if (estimated) acc.estimated = true;
 }
 
 const sessions = new Map<string, SessionRecord>();
@@ -228,7 +254,8 @@ function mapThinkingLevel(depth: ThinkingDepth): ThinkingLevel {
 async function runGeminiLoop(
   session: SessionRecord,
   config: ChatRequestConfig,
-  traces: ToolTrace[]
+  traces: ToolTrace[],
+  usage: TokenUsage = emptyUsage()
 ): Promise<ChatTurnResult> {
   const ai = getGeminiClient();
   const model = config.apiModel || 'gemini-4-hydrogen';
@@ -252,6 +279,14 @@ async function runGeminiLoop(
       config: geminiConfig,
     });
 
+    const um = response.usageMetadata;
+    if (um) {
+      const prompt = um.promptTokenCount || 0;
+      const completion = (um.candidatesTokenCount || 0) + (um.thoughtsTokenCount || 0);
+      const total = um.totalTokenCount || prompt + completion;
+      addUsage(usage, prompt, completion, total);
+    }
+
     const candidateContent = response.candidates?.[0]?.content;
     if (candidateContent) {
       session.geminiContents.push(candidateContent);
@@ -266,6 +301,7 @@ async function runGeminiLoop(
         toolCalls: traces,
         providerLabel: 'Google Gemini',
         modelLabel: model,
+        usage,
       };
     }
 
@@ -324,6 +360,7 @@ async function runGeminiLoop(
           providerKind: 'gemini',
           config,
           tracesSoFar: traces,
+          usageSoFar: usage,
           geminiContents: session.geminiContents,
         };
 
@@ -339,6 +376,7 @@ async function runGeminiLoop(
           },
           providerLabel: 'Google Gemini',
           modelLabel: model,
+          usage,
         };
       }
 
@@ -383,6 +421,7 @@ async function runGeminiLoop(
     toolCalls: traces,
     providerLabel: 'Google Gemini',
     modelLabel: model,
+    usage,
   };
 }
 
@@ -402,7 +441,8 @@ async function runOpenAiCompatLoop(
   apiKey: string | undefined,
   providerLabel: string,
   model: string,
-  providerKind: 'openai_compat' | 'ollama'
+  providerKind: 'openai_compat' | 'ollama',
+  usage: TokenUsage = emptyUsage()
 ): Promise<ChatTurnResult> {
   const systemPrompt =
     buildSystemInstruction() +
@@ -458,6 +498,13 @@ async function runOpenAiCompatLoop(
           function?: { name?: string; arguments?: Record<string, unknown> | string };
         }>;
       };
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
+      prompt_eval_count?: number;
+      eval_count?: number;
     };
 
     const msg = data.choices?.[0]?.message || data.message;
@@ -467,6 +514,29 @@ async function runOpenAiCompatLoop(
 
     const rawText = (msg.content || '').trim();
     const nativeToolCalls = msg.tool_calls || [];
+
+    if (data.usage) {
+      const p = data.usage.prompt_tokens || 0;
+      const c = data.usage.completion_tokens || 0;
+      addUsage(usage, p, c, data.usage.total_tokens || p + c);
+    } else if (typeof data.prompt_eval_count === 'number' || typeof data.eval_count === 'number') {
+      const p = data.prompt_eval_count || 0;
+      const c = data.eval_count || 0;
+      addUsage(usage, p, c, p + c);
+    } else {
+      const promptChars = messages.reduce(
+        (sum, m) => sum + JSON.stringify(m).length,
+        0
+      );
+      const completionChars = rawText.length + JSON.stringify(nativeToolCalls).length;
+      addUsage(
+        usage,
+        Math.max(1, Math.ceil(promptChars / 4)),
+        Math.max(1, Math.ceil(completionChars / 4)),
+        undefined,
+        true
+      );
+    }
 
     if (nativeToolCalls.length === 0) {
       const fallback = providerKind === 'ollama' ? parseFallbackCommand(rawText) : null;
@@ -492,6 +562,7 @@ async function runOpenAiCompatLoop(
             providerKind,
             config,
             tracesSoFar: traces,
+            usageSoFar: usage,
             openaiMessages: session.openaiMessages,
           };
           return {
@@ -506,6 +577,7 @@ async function runOpenAiCompatLoop(
             },
             providerLabel,
             modelLabel: model,
+            usage,
           };
         }
 
@@ -540,6 +612,7 @@ async function runOpenAiCompatLoop(
         toolCalls: traces,
         providerLabel,
         modelLabel: model,
+        usage,
       };
     }
 
@@ -605,6 +678,7 @@ async function runOpenAiCompatLoop(
           providerKind,
           config,
           tracesSoFar: traces,
+          usageSoFar: usage,
           openaiMessages: session.openaiMessages,
         };
         return {
@@ -619,6 +693,7 @@ async function runOpenAiCompatLoop(
           },
           providerLabel,
           modelLabel: model,
+          usage,
         };
       }
 
@@ -656,13 +731,15 @@ async function runOpenAiCompatLoop(
     toolCalls: traces,
     providerLabel,
     modelLabel: model,
+    usage,
   };
 }
 
 async function runAnthropicLoop(
   session: SessionRecord,
   config: ChatRequestConfig,
-  traces: ToolTrace[]
+  traces: ToolTrace[],
+  usage: TokenUsage = emptyUsage()
 ): Promise<ChatTurnResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -700,7 +777,15 @@ async function runAnthropicLoop(
         name?: string;
         input?: Record<string, unknown>;
       }>;
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+      };
     };
+
+    if (data.usage) {
+      addUsage(usage, data.usage.input_tokens || 0, data.usage.output_tokens || 0);
+    }
 
     const blocks = data.content || [];
     session.anthropicMessages.push({ role: 'assistant', content: blocks });
@@ -715,6 +800,7 @@ async function runAnthropicLoop(
         toolCalls: traces,
         providerLabel: 'Anthropic',
         modelLabel: model,
+        usage,
       };
     }
 
@@ -765,6 +851,7 @@ async function runAnthropicLoop(
           providerKind: 'anthropic',
           config,
           tracesSoFar: traces,
+          usageSoFar: usage,
           anthropicMessages: session.anthropicMessages,
         };
         return {
@@ -779,6 +866,7 @@ async function runAnthropicLoop(
           },
           providerLabel: 'Anthropic',
           modelLabel: model,
+          usage,
         };
       }
 
@@ -818,6 +906,7 @@ async function runAnthropicLoop(
     toolCalls: traces,
     providerLabel: 'Anthropic',
     modelLabel: model,
+    usage,
   };
 }
 
@@ -990,7 +1079,7 @@ export async function handleToolDecision(
         },
       ],
     });
-    return runGeminiLoop(session, pending.config, traces);
+    return runGeminiLoop(session, pending.config, traces, { ...pending.usageSoFar });
   }
 
   if (pending.providerKind === 'anthropic') {
@@ -1004,7 +1093,7 @@ export async function handleToolDecision(
         },
       ],
     });
-    return runAnthropicLoop(session, pending.config, traces);
+    return runAnthropicLoop(session, pending.config, traces, { ...pending.usageSoFar });
   }
 
   // OpenAI-compatible or Ollama
@@ -1041,7 +1130,8 @@ export async function handleToolDecision(
       process.env.OPENAI_API_KEY,
       'OpenAI API',
       pending.config.apiModel || 'gpt-4o-mini',
-      'openai_compat'
+      'openai_compat',
+      { ...pending.usageSoFar }
     );
   }
 
@@ -1054,6 +1144,7 @@ export async function handleToolDecision(
     undefined,
     providerLabel,
     pending.config.localModel,
-    providerKind
+    providerKind,
+    { ...pending.usageSoFar }
   );
 }

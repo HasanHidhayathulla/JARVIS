@@ -3,7 +3,7 @@ export type ApiProviderId = 'gemini' | 'openai' | 'anthropic';
 export type LocalRuntimeId = 'ollama' | 'lmstudio' | 'custom';
 export type ThinkingDepth = 'LOW' | 'MEDIUM' | 'HIGH' | 'XHIGH';
 export type ExecutionPolicy = 'ask' | 'auto';
-export type WorkspaceView = 'workspace' | 'providers' | 'log';
+export type WorkspaceView = 'workspace' | 'dashboard' | 'providers' | 'log';
 
 export interface ModelConfig {
   mode: ProviderMode;
@@ -77,6 +77,13 @@ export interface ToolCallTrace {
   durationMs?: number;
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimated?: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'error';
@@ -85,6 +92,7 @@ export interface ChatMessage {
   providerLabel?: string;
   modelLabel?: string;
   toolCalls?: ToolCallTrace[];
+  usage?: TokenUsage;
 }
 
 export interface ChatSession {

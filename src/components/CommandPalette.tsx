@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  BarChart3,
   Command,
   Cpu,
   FolderSync,
@@ -356,6 +357,17 @@ export function CommandPalette({
       active: activeView === 'workspace',
       icon: <Terminal className="w-4 h-4" aria-hidden="true" />,
       run: () => onSelectView('workspace'),
+    });
+
+    list.push({
+      id: 'nav-dashboard',
+      category: 'Navigation & Theme',
+      title: 'Go to Dashboard',
+      subtitle: 'Visualize token usage and terminal command frequency',
+      keywords: 'dashboard charts analytics tokens frequency metrics view navigate',
+      active: activeView === 'dashboard',
+      icon: <BarChart3 className="w-4 h-4" aria-hidden="true" />,
+      run: () => onSelectView('dashboard'),
     });
 
     list.push({
